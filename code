@@ -1,0 +1,41 @@
+//@version=4
+
+strategy("EMA Crossover Strategy with Trailing Stop Loss", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+  
+
+// Define input variables
+
+ema_100 = ema(close, 100)
+
+ema_200 = ema(close, 200)
+
+take_profit = 99
+
+stop_loss = 35
+
+trail_points = 10 // Set the trailing stop loss distance to 10 points
+
+  
+
+// Define buy and sell conditions
+
+buy_condition = crossover(close, ema_100) and crossover(close, ema_200)
+
+sell_condition = crossunder(close, ema_100) and crossunder(close, ema_200)
+
+  
+
+// Execute buy and sell orders if buy_condition
+
+if buy_condition
+
+strategy.entry("Buy", strategy.long)
+
+strategy.exit("TP/SL/Trailing", "Buy", profit=take_profit, loss=stop_loss, trail_points=trail_points)
+
+else if sell_condition
+
+strategy.entry("Sell", strategy.short)
+
+strategy.exit("TP/SL/Trailing", "Sell", profit=take_profit, loss=stop_loss, trail_points=trail_points)
