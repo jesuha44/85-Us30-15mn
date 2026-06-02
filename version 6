@@ -1,0 +1,148 @@
+//@version=6
+strategy("JB EMA Trend Strategy V3",
+     overlay=true,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=10)
+
+// =====================================================
+// INPUTS
+// =====================================================
+
+fastLen = input.int(50, "Fast EMA")
+slowLen = input.int(200, "Slow EMA")
+
+slPoints = input.float(100, "Stop Loss")
+tp1Points = input.float(100, "TP1")
+tp2Points = input.float(200, "TP2")
+tp3Points = input.float(500, "TP3")
+
+adxLength = input.int(14, "ADX Length")
+adxFilter = input.float(20, "Minimum ADX")
+
+// =====================================================
+// EMA CALCULATIONS
+// =====================================================
+
+fastEMA = ta.ema(close, fastLen)
+slowEMA = ta.ema(close, slowLen)
+
+plot(fastEMA, color=color.aqua, linewidth=2)
+plot(slowEMA, color=color.orange, linewidth=2)
+
+// =====================================================
+// TREND FILTERS
+// =====================================================
+
+// 200 EMA must be rising
+slowTrendUp = slowEMA > slowEMA[5]
+
+// Body fully above EMAs
+bodyAbove =
+     math.min(open, close) > fastEMA and
+     math.min(open, close) > slowEMA
+
+// Fresh crossover
+freshBullCross = ta.crossover(fastEMA, slowEMA)
+
+// ADX Filter
+[diplus, diminus, adx] = ta.dmi(adxLength, adxLength)
+
+strongTrend = adx > adxFilter
+
+// =====================================================
+// ENTRY CONDITIONS
+// =====================================================
+
+longCondition =
+     fastEMA > slowEMA and
+     slowTrendUp and
+     bodyAbove and
+     strongTrend
+
+// Only enter when flat
+if longCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+// =====================================================
+// POSITION MANAGEMENT
+// =====================================================
+
+var bool tp1Hit = false
+var bool tp2Hit = false
+
+if strategy.position_size == 0
+    tp1Hit := false
+    tp2Hit := false
+
+if strategy.position_size > 0
+
+    entryPrice = strategy.position_avg_price
+
+    tp1Price = entryPrice + tp1Points
+    tp2Price = entryPrice + tp2Points
+    tp3Price = entryPrice + tp3Points
+
+    if high >= tp1Price
+        tp1Hit := true
+
+    if high >= tp2Price
+        tp2Hit := true
+
+    stopPrice =
+         tp2Hit ? entryPrice + 100 :
+         tp1Hit ? entryPrice :
+         entryPrice - slPoints
+
+    strategy.exit(
+         "TP1",
+         from_entry="Long",
+         qty_percent=33,
+         limit=tp1Price,
+         stop=stopPrice)
+
+    strategy.exit(
+         "TP2",
+         from_entry="Long",
+         qty_percent=33,
+         limit=tp2Price,
+         stop=stopPrice)
+
+    strategy.exit(
+         "Runner",
+         from_entry="Long",
+         qty_percent=34,
+         limit=tp3Price,
+         stop=stopPrice)
+
+// =====================================================
+// EXIT CONDITIONS
+// =====================================================
+
+// Strong bearish confirmation
+
+bodyBelow =
+     math.max(open, close) < fastEMA and
+     math.max(open, close) < slowEMA
+
+bearishConfirm =
+     fastEMA < slowEMA and
+     bodyBelow
+
+if bearishConfirm
+    strategy.close("Long")
+
+// =====================================================
+// VISUALS
+// =====================================================
+
+plotshape(longCondition,
+     style=shape.triangleup,
+     color=color.lime,
+     size=size.small,
+     location=location.belowbar)
+
+plotshape(bearishConfirm,
+     style=shape.triangledown,
+     color=color.red,
+     size=size.small,
+     location=location.abovebar)
