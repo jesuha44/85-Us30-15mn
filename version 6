@@ -14,7 +14,7 @@ slowLen = input.int(227, "Slow EMA")
 slPoints = input.float(100, "Stop Loss")
 tp1Points = input.float(100, "TP1")
 tp2Points = input.float(200, "TP2")
-tp3Points = input.float(500, "TP3")
+tp3Points = input.float(534, "TP3")
 
 adxLength = input.int(12, "ADX Length")
 adxFilter = input.float(25, "Minimum ADX")
