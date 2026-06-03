@@ -8,15 +8,15 @@ strategy("JB EMA Trend Strategy V3",
 // INPUTS
 // =====================================================
 
-fastLen = input.int(50, "Fast EMA")
-slowLen = input.int(200, "Slow EMA")
+fastLen = input.int(44, "Fast EMA")
+slowLen = input.int(227, "Slow EMA")
 
 slPoints = input.float(100, "Stop Loss")
 tp1Points = input.float(100, "TP1")
 tp2Points = input.float(200, "TP2")
 tp3Points = input.float(500, "TP3")
 
-adxLength = input.int(14, "ADX Length")
+adxLength = input.int(12, "ADX Length")
 adxFilter = input.float(25, "Minimum ADX")
 
 // =====================================================
