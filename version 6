@@ -17,7 +17,7 @@ tp2Points = input.float(200, "TP2")
 tp3Points = input.float(500, "TP3")
 
 adxLength = input.int(14, "ADX Length")
-adxFilter = input.float(20, "Minimum ADX")
+adxFilter = input.float(25, "Minimum ADX")
 
 // =====================================================
 // EMA CALCULATIONS
