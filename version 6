@@ -1,5 +1,5 @@
 //@version=6
-strategy("JB EMA Trend Strategy V3",
+strategy("Gamas Strategy",
      overlay=true,
      default_qty_type=strategy.percent_of_equity,
      default_qty_value=10)
@@ -11,13 +11,15 @@ strategy("JB EMA Trend Strategy V3",
 fastLen = input.int(44, "Fast EMA")
 slowLen = input.int(227, "Slow EMA")
 
-slPoints = input.float(100, "Stop Loss")
+slPoints  = input.float(100, "Stop Loss")
 tp1Points = input.float(100, "TP1")
 tp2Points = input.float(200, "TP2")
 tp3Points = input.float(534, "TP3")
 
 adxLength = input.int(12, "ADX Length")
 adxFilter = input.float(25, "Minimum ADX")
+
+crossLookback = input.int(1, "Crossover Lookback Bars")  // was 5
 
 // =====================================================
 // EMA CALCULATIONS
@@ -26,40 +28,43 @@ adxFilter = input.float(25, "Minimum ADX")
 fastEMA = ta.ema(close, fastLen)
 slowEMA = ta.ema(close, slowLen)
 
-plot(fastEMA, color=color.aqua, linewidth=2)
+plot(fastEMA, color=color.aqua,   linewidth=2)
 plot(slowEMA, color=color.orange, linewidth=2)
 
 // =====================================================
 // TREND FILTERS
 // =====================================================
 
-// 200 EMA must be rising
 slowTrendUp = slowEMA > slowEMA[5]
 
-// Body fully above EMAs
-bodyAbove =
-     math.min(open, close) > fastEMA and
-     math.min(open, close) > slowEMA
-
-// Fresh crossover
-freshBullCross = ta.crossover(fastEMA, slowEMA)
-
-// ADX Filter
 [diplus, diminus, adx] = ta.dmi(adxLength, adxLength)
-
 strongTrend = adx > adxFilter
 
 // =====================================================
 // ENTRY CONDITIONS
 // =====================================================
 
-longCondition =
-     fastEMA > slowEMA and
-     slowTrendUp and
-     bodyAbove and
-     strongTrend
+bullCross   = ta.crossover(fastEMA, slowEMA)
+recentCross = ta.barssince(bullCross) <= crossLookback
 
-// Only enter when flat
+// Prior bar touched EMA, this bar bounces off it with a strong close
+barRange    = high - low
+closePct    = barRange > 0 ? (close - low) / barRange : 0.5
+strongClose = closePct >= 0.6   // close in top 40% of candle
+
+pullbackEntry =
+     fastEMA > slowEMA             and
+     low[1] <= fastEMA[1] * 1.001  and  // prior bar touched EMA
+     close   >  fastEMA            and  // this bar recovered above
+     strongClose                   and  // not a doji/weak close
+     close   >  open                    // green candle
+
+longCondition =
+     slowTrendUp and
+     strongTrend and
+     fastEMA > slowEMA and
+     (recentCross or pullbackEntry)
+
 if longCondition and strategy.position_size == 0
     strategy.entry("Long", strategy.long)
 
@@ -84,7 +89,6 @@ if strategy.position_size > 0
 
     if high >= tp1Price
         tp1Hit := true
-
     if high >= tp2Price
         tp2Hit := true
 
@@ -93,32 +97,13 @@ if strategy.position_size > 0
          tp1Hit ? entryPrice :
          entryPrice - slPoints
 
-    strategy.exit(
-         "TP1",
-         from_entry="Long",
-         qty_percent=33,
-         limit=tp1Price,
-         stop=stopPrice)
-
-    strategy.exit(
-         "TP2",
-         from_entry="Long",
-         qty_percent=33,
-         limit=tp2Price,
-         stop=stopPrice)
-
-    strategy.exit(
-         "Runner",
-         from_entry="Long",
-         qty_percent=34,
-         limit=tp3Price,
-         stop=stopPrice)
+    strategy.exit("TP1",    from_entry="Long", qty_percent=33, limit=tp1Price, stop=stopPrice)
+    strategy.exit("TP2",    from_entry="Long", qty_percent=33, limit=tp2Price, stop=stopPrice)
+    strategy.exit("Runner", from_entry="Long", qty_percent=34, limit=tp3Price, stop=stopPrice)
 
 // =====================================================
 // EXIT CONDITIONS
 // =====================================================
-
-// Strong bearish confirmation
 
 bodyBelow =
      math.max(open, close) < fastEMA and
@@ -135,11 +120,18 @@ if bearishConfirm
 // VISUALS
 // =====================================================
 
-plotshape(longCondition,
+plotshape(longCondition and strategy.position_size == 0,
      style=shape.triangleup,
      color=color.lime,
      size=size.small,
      location=location.belowbar)
+
+plotshape(recentCross and slowTrendUp and strongTrend,
+     style=shape.triangleup,
+     color=color.blue,
+     size=size.tiny,
+     location=location.belowbar,
+     title="Cross Signal")
 
 plotshape(bearishConfirm,
      style=shape.triangledown,
