@@ -1,0 +1,126 @@
+//@version=6
+strategy("Gamas Strategy Trail",
+     overlay=true,
+     initial_capital=1000,
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=1000,    // 1000% of equity = ~10x leverage on a $1,000 account
+     commission_type=strategy.commission.cash_per_order,
+     commission_value=0.0,
+     slippage=1)
+
+// =====================================================
+// INPUTS  (pips)
+// =====================================================
+
+fastLen = input.int(7,  "Fast EMA")
+midLen  = input.int(21, "Mid EMA")
+slowLen = input.int(50, "Slow EMA")
+
+slPips  = input.float(15, "Stop Loss (pips)")
+tp1Pips = input.float(15, "TP1 (pips)")
+tp2Pips = input.float(30, "TP2 (pips)")
+
+atrLen  = input.int(14,    "ATR Length")
+atrMult = input.float(2.0, "ATR Trail Multiplier")   // lower = tighter trail
+
+useEmaExit = input.bool(true, "Use bearish EMA-flip safety close")
+
+// 1 pip (5-decimal FX feed: 0.00001 * 10 = 0.0001)
+pip = syminfo.mintick * 10
+
+// =====================================================
+// EMAs + ATR
+// =====================================================
+
+emaFast = ta.ema(close, fastLen)   // 7
+emaMid  = ta.ema(close, midLen)    // 21
+emaSlow = ta.ema(close, slowLen)   // 50
+atrVal  = ta.atr(atrLen)
+
+plot(emaFast, "Fast EMA 7",  color=color.aqua,   linewidth=2)
+plot(emaMid,  "Mid EMA 21",  color=color.orange, linewidth=2)
+plot(emaSlow, "Slow EMA 50", color=color.purple, linewidth=2)
+
+// =====================================================
+// ENTRY -- first bar that closes above ALL THREE EMAs
+// =====================================================
+
+aboveAll     = close > emaFast and close > emaMid and close > emaSlow
+prevAboveAll = close[1] > emaFast[1] and close[1] > emaMid[1] and close[1] > emaSlow[1]
+longSignal   = aboveAll and not prevAboveAll
+
+if longSignal and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+// =====================================================
+// POSITION MANAGEMENT
+// =====================================================
+
+var bool  tp1Hit    = false
+var bool  tp2Hit    = false
+var float trailStop = na
+
+// global holder so we can plot at top level (plot() can't live inside an if)
+float stopToPlot = na
+
+if strategy.position_size == 0
+    tp1Hit    := false
+    tp2Hit    := false
+    trailStop := na
+
+if strategy.position_size > 0
+
+    entryPrice = strategy.position_avg_price
+    tp1Price   = entryPrice + tp1Pips * pip
+    tp2Price   = entryPrice + tp2Pips * pip
+
+    if high >= tp1Price
+        tp1Hit := true
+    if high >= tp2Price
+        tp2Hit := true
+
+    // ---- staged base stop (before the trail takes over) ----
+    baseStopPips =
+         tp2Hit ? tp1Pips :     // lock +15 after TP2
+         tp1Hit ? 0.0     :     // breakeven after TP1
+                  -slPips       // initial stop
+    baseStop = entryPrice + baseStopPips * pip
+
+    // ---- ATR chandelier trail, live as soon as TP2 hits ----
+    if tp2Hit
+        atrTrail  = high - atrVal * atrMult
+        trailStop := na(trailStop) ? atrTrail : math.max(trailStop, atrTrail)
+
+    // final stop = most protective of base + trail, never moves down
+    stopPrice = tp2Hit ? math.max(baseStop, nz(trailStop, baseStop)) : baseStop
+
+    strategy.exit("TP1", from_entry="Long", qty_percent=33, limit=tp1Price, stop=stopPrice)
+    strategy.exit("TP2", from_entry="Long", qty_percent=33, limit=tp2Price, stop=stopPrice)
+    strategy.exit("Run", from_entry="Long", qty_percent=34,                 stop=stopPrice)
+
+    // hand the value out to the global holder
+    stopToPlot := tp2Hit ? stopPrice : na
+
+// plot the live trailing stop at TOP LEVEL (not inside the if)
+plot(stopToPlot, "Trailing Stop", color=color.fuchsia, style=plot.style_linebr)
+
+// =====================================================
+// EXIT -- bearish EMA flip safety close (toggle)
+// uses the 7/21 pair for a responsive exit
+// =====================================================
+
+bodyBelow      = math.max(open, close) < emaFast and math.max(open, close) < emaMid
+bearishConfirm = emaFast < emaMid and bodyBelow
+
+if useEmaExit and bearishConfirm
+    strategy.close("Long")
+
+// =====================================================
+// VISUALS
+// =====================================================
+
+plotshape(longSignal and strategy.position_size == 0,
+     style=shape.triangleup, color=color.lime, size=size.small, location=location.belowbar)
+
+plotshape(bearishConfirm,
+     style=shape.triangledown, color=color.red, size=size.small, location=location.abovebar)
